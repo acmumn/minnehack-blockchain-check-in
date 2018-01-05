@@ -1,0 +1,7 @@
+.*
+!.gitignore
+*~
+*.log
+*.rs.bk
+
+/target/
