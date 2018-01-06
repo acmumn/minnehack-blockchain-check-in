@@ -1,8 +1,7 @@
-use std::cmp::min;
 use std::io::{Result, Write};
 use std::net::SocketAddr;
 
-use nom::{IResult, le_u8, le_u16};
+use byteorder::{ByteOrder, LE};
 
 use p2p::Message;
 
@@ -14,11 +13,11 @@ impl Message {
             Message::Pong => w.write_all(&[0x01]),
             Message::PeerListRequest => w.write_all(&[0x02]),
             Message::PeerListResponse(ref peers) => {
-                let l = min(8, peers.len());
+                let l = peers.len();
+                assert!(l < 256);
                 w.write_all(&[0x03, l as u8])?;
                 for i in 0..l {
-                    w.write_all(&(peers[i].0).0)?;
-                    write_addr_to(peers[i].1, &mut w)?;
+                    write_addr_to(peers[i], &mut w)?;
                 }
                 Ok(())
             }
@@ -41,8 +40,8 @@ fn write_addr_to<W: Write>(addr: SocketAddr, w: &mut W) -> Result<()> {
             addr.port()
         }
     };
-    w.write_all(&[
-        (port & 0xff) as u8,
-        (port >> 8) as u8,
-    ])
+
+    let mut buf = [0; 2];
+    LE::write_u16(&mut buf, port);
+    w.write_all(&buf)
 }

@@ -1,21 +1,9 @@
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
-use nom::{IResult, le_u8, le_u16};
-use sodiumoxide::crypto::box_::PublicKey;
+use nom::{IResult, le_u16, le_u8};
 
 use p2p::Message;
-
-/// Parses a packet from a buffer.
-pub fn parse_packet(buf: &[u8]) -> Option<(PublicKey, Message)> {
-    match packet(buf) {
-        IResult::Done(rest, packet) => if rest.is_empty() {
-            Some(packet)
-        } else {
-            None
-        },
-        _ => None,
-    }
-}
+use util::to_arrayvec;
 
 impl Message {
     /// Attempts to parse a `Message` from a buffer.
@@ -31,7 +19,6 @@ impl Message {
     }
 }
 
-named!(packet(&[u8]) -> (PublicKey, Message), pair!(pub_key, message));
 named!(message(&[u8]) -> Message, alt_complete!(
     ping | pong | peer_list_request | peer_list_response
 ));
@@ -40,14 +27,9 @@ named!(ping(&[u8]) -> Message, map!(tag!([0x00]), |_| Message::Ping));
 named!(pong(&[u8]) -> Message, map!(tag!([0x01]), |_| Message::Pong));
 named!(peer_list_request(&[u8]) -> Message,
     map!(tag!([0x02]), |_| Message::PeerListRequest));
-named!(peer_list_response(&[u8]) -> Message, do_parse!(
-    tag!([0x03]) >>
-    peers: length_count!(le_u8, peer) >>
-    ( Message::PeerListResponse(peers) )));
-
-named!(peer(&[u8]) -> (PublicKey, SocketAddr), pair!(pub_key, sock_addr));
-named!(pub_key(&[u8]) -> PublicKey,
-    map!(count_fixed!(u8, le_u8, 32), PublicKey));
+named!(peer_list_response(&[u8]) -> Message, map_opt!(
+    pair!(tag!([0x03]), length_count!(le_u8, sock_addr)),
+    |(_, addrs)| to_arrayvec(addrs).map(Message::PeerListResponse)));
 
 named!(sock_addr(&[u8]) -> SocketAddr, alt_complete!(
     map!(sock_addr_4, SocketAddr::V4) |

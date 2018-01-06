@@ -1,18 +1,25 @@
 use std::net::SocketAddr;
 #[cfg(test)]
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
+use std::net::{SocketAddrV4, SocketAddrV6};
 
+use arrayvec::ArrayVec;
 #[cfg(test)]
 use quickcheck::{Arbitrary, Gen};
-use sodiumoxide::crypto::box_::PublicKey;
 
+/// A message sent over the P2P layer.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum Message {
+    /// A ping, which requests a `Pong` in response. Used for discovery.
     Ping,
+
+    /// A response to a `Ping`.
     Pong,
 
+    /// A request for a list of connected peers.
     PeerListRequest,
-    PeerListResponse(Vec<(PublicKey, SocketAddr)>),
+
+    /// A response containing up to 8 connected peers.
+    PeerListResponse(ArrayVec<[SocketAddr; 8]>),
 }
 
 #[cfg(test)]
@@ -23,15 +30,13 @@ impl Arbitrary for Message {
             1 => Message::Pong,
             2 => Message::PeerListRequest,
             3 => {
-                let num_peers = gen.gen::<u8>() % 8;
-                let mut peers = Vec::new();
+                let mut peers = ArrayVec::new();
+                let num_peers = gen.gen::<usize>() % peers.capacity();
                 for _ in 0..num_peers {
-                    let key = arbitrary_key(gen);
-                    let addr = arbitrary_addr(gen);
-                    peers.push((key, addr));
+                    peers.push(arbitrary_addr(gen));
                 }
                 Message::PeerListResponse(peers)
-            },
+            }
             _ => unreachable!(),
         }
     }
@@ -49,11 +54,4 @@ fn arbitrary_addr<G: Gen>(gen: &mut G) -> SocketAddr {
         gen.fill_bytes(&mut buf);
         SocketAddr::V6(SocketAddrV6::new(buf.into(), port, 0, 0))
     }
-}
-
-#[cfg(test)]
-fn arbitrary_key<G: Gen>(gen: &mut G) -> PublicKey {
-    let mut key = [0; 32];
-    gen.fill_bytes(&mut key);
-    PublicKey(key)
 }

@@ -18,7 +18,11 @@ pub struct Block {
     index: u64,
     prev_hash: Digest,
 
+    /// The time at which the block's hash was computed. This may be updated
+    /// when a fork occurs.
     pub timestamp: u64,
+
+    /// The data in the block.
     pub data: Vec<u8>,
 
     hash: Digest,
