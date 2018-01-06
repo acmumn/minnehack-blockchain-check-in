@@ -15,6 +15,7 @@ serde_cbor = "0.8.1"
 serde_derive = "1.0.27"
 sodiumoxide = "0.0.16"
 lazy_static = "1.0.0"
+nom = "3.2.1"
 
 [dev-dependencies]
 quickcheck = "0.6.0"

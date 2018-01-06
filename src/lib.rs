@@ -5,6 +5,8 @@ extern crate error_chain;
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate nom;
 #[cfg(test)]
 #[macro_use]
 extern crate quickcheck;
@@ -22,7 +24,7 @@ pub use errors::{Error, ErrorKind, Result, ResultExt};
 /// Initializes the library. This performs one-time startup tasks.
 pub fn init() -> Result<()> {
     if !sodiumoxide::init() {
-        return Err(ErrorKind::CouldNotInitLibsodium.into());
+        return Err(ErrorKind::CouldNotInitLibSodium.into());
     }
     Ok(())
 }
