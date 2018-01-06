@@ -77,18 +77,13 @@ fn run(_matches: ArgMatches) -> Result<()> {
                 Message::PeerListRequest => {
                     info!("Got request for list of peers from {}", addr);
 
-                    let known_peers =
-                        p2p.peers.read().unwrap().entries().filter_map(
-                            |(&addr, &state)| {
-                                if state != PeerState::Speculative {
-                                    unimplemented!()
-                                } else {
-                                    unimplemented!()
-                                }
-                            },
-                        );
+                    let lock = p2p.peers.read().unwrap();
+                    let known_peers = (&*lock)
+                        .into_iter()
+                        .filter(|&(_, &state)| state != PeerState::Speculative)
+                        .map(|(&addr, _)| addr);
 
-                    let peers = ArrayVec::new();
+                    let mut peers = ArrayVec::new();
                     peers.extend(known_peers);
                     log_err(p2p.send_to(
                         addr,
