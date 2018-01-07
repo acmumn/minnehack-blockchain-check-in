@@ -12,8 +12,8 @@ impl Message {
         match *self {
             Message::Ping => w.write_all(&[0x00]),
             Message::Pong => w.write_all(&[0x01]),
-            Message::ListRequest => w.write_all(&[0x02]),
-            Message::ListResponse(ref peers) => {
+            Message::PeerRequest => w.write_all(&[0x02]),
+            Message::PeerResponse(ref peers) => {
                 let l = peers.len();
                 assert!(l < 256);
                 w.write_all(&[0x03, l as u8])?;

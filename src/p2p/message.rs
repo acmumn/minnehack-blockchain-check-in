@@ -18,10 +18,10 @@ pub enum Message {
     Pong,
 
     /// A request for a list of connected peers.
-    ListRequest,
+    PeerRequest,
 
     /// A response containing up to 8 connected peers.
-    ListResponse(ArrayVec<[SocketAddr; 8]>),
+    PeerResponse(ArrayVec<[SocketAddr; 8]>),
 
     /// A request for the peer's status.
     StatusRequest,
@@ -46,14 +46,14 @@ impl Arbitrary for Message {
         match gen.gen::<u8>() % 8 {
             0 => Message::Ping,
             1 => Message::Pong,
-            2 => Message::ListRequest,
+            2 => Message::PeerRequest,
             3 => {
                 let mut peers = ArrayVec::new();
                 let num_peers = gen.gen::<usize>() % peers.capacity();
                 for _ in 0..num_peers {
                     peers.push(arbitrary_addr(gen));
                 }
-                Message::ListResponse(peers)
+                Message::PeerResponse(peers)
             }
             4 => Message::StatusRequest,
             5 => {

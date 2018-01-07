@@ -7,6 +7,7 @@ mod serialize;
 mod tests;
 
 use std::cmp::max;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use arrayvec::ArrayVec;
@@ -32,6 +33,12 @@ impl Arbitrary for Hash {
         let mut buf = [0; 32];
         gen.fill_bytes(&mut buf);
         Hash(buf)
+    }
+}
+
+impl Display for Hash {
+    fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
+        self.0.iter().map(|b| write!(fmt, "{:02x}", b)).collect()
     }
 }
 
@@ -184,6 +191,11 @@ impl Chain {
         None
     }
 
+    /// Returns a reference to the first block in the chain.
+    pub fn genesis(&self) -> &Block {
+        &self.genesis
+    }
+
     /// Returns whether the chain is valid.
     pub fn is_valid(&self) -> bool {
         let mut prev = &self.genesis;
@@ -197,20 +209,15 @@ impl Chain {
         self.genesis.index == 0
     }
 
-    /// Returns a reference to the last block in the chain.
-    pub fn last(&self) -> &Block {
-        self.blocks.last().unwrap_or(&self.genesis)
-    }
-
     /// Mines a new block with the given data.
     pub fn mine(&mut self, data: ArrayVec<[u8; 256]>) {
-        let block = self.last().create(data);
+        let block = self.tip().create(data);
         self.blocks.push(block);
     }
 
     /// Mines a new block with the given data and timestamp.
     pub fn mine_at(&mut self, timestamp: u64, data: ArrayVec<[u8; 256]>) {
-        let block = self.last().create_at(timestamp, data);
+        let block = self.tip().create_at(timestamp, data);
         self.blocks.push(block);
     }
 
@@ -235,10 +242,15 @@ impl Chain {
         }
     }
 
+    /// Returns a reference to the last block in the chain.
+    pub fn tip(&self) -> &Block {
+        self.blocks.last().unwrap_or(&self.genesis)
+    }
+
     /// Returns whether the given block is valid as the next block in the
     /// chain.
     pub fn valid_tail(&self, block: &Block) -> bool {
-        self.last().valid_next(block)
+        self.tip().valid_next(block)
     }
 
     /// Creates a new Chain with the given genesis block.

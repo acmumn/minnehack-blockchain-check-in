@@ -21,17 +21,17 @@ impl Message {
 }
 
 named!(message(&[u8]) -> Message, alt_complete!(
-    ping | pong | list_request | list_response | status_request |
+    ping | pong | peer_request | peer_response | status_request |
     status_response | block_request | block_response | block_announce
 ));
 
 named!(ping(&[u8]) -> Message, map!(tag!([0x00]), |_| Message::Ping));
 named!(pong(&[u8]) -> Message, map!(tag!([0x01]), |_| Message::Pong));
-named!(list_request(&[u8]) -> Message,
-    map!(tag!([0x02]), |_| Message::ListRequest));
-named!(list_response(&[u8]) -> Message, map_opt!(
+named!(peer_request(&[u8]) -> Message,
+    map!(tag!([0x02]), |_| Message::PeerRequest));
+named!(peer_response(&[u8]) -> Message, map_opt!(
     pair!(tag!([0x03]), length_count!(le_u8, sock_addr)),
-    |(_, addrs)| vec_to_arrayvec(addrs).map(Message::ListResponse)));
+    |(_, addrs)| vec_to_arrayvec(addrs).map(Message::PeerResponse)));
 named!(status_request(&[u8]) -> Message,
     map!(tag!([0x04]), |_| Message::StatusRequest));
 named!(status_response(&[u8]) -> Message, do_parse!(
