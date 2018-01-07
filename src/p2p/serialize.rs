@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 use byteorder::{ByteOrder, LE};
 
 use p2p::Message;
+use util::write_u64_to;
 
 impl Message {
     /// Serializes the `Message` to a `Write`.
@@ -11,8 +12,8 @@ impl Message {
         match *self {
             Message::Ping => w.write_all(&[0x00]),
             Message::Pong => w.write_all(&[0x01]),
-            Message::PeerListRequest => w.write_all(&[0x02]),
-            Message::PeerListResponse(ref peers) => {
+            Message::ListRequest => w.write_all(&[0x02]),
+            Message::ListResponse(ref peers) => {
                 let l = peers.len();
                 assert!(l < 256);
                 w.write_all(&[0x03, l as u8])?;
@@ -20,6 +21,25 @@ impl Message {
                     write_addr_to(peers[i], &mut w)?;
                 }
                 Ok(())
+            }
+            Message::StatusRequest => w.write_all(&[0x04]),
+            Message::StatusResponse(ref g_hash, t_idx, ref t_hash) => {
+                w.write_all(&[0x05])?;
+                w.write_all(&g_hash.0)?;
+                write_u64_to(t_idx, &mut w)?;
+                w.write_all(&t_hash.0)
+            }
+            Message::BlockRequest(idx) => {
+                w.write_all(&[0x06])?;
+                write_u64_to(idx, &mut w)
+            }
+            Message::BlockResponse(ref block) => {
+                w.write_all(&[0x07])?;
+                block.write_to(w)
+            }
+            Message::BlockAnnounce(ref block) => {
+                w.write_all(&[0x08])?;
+                block.write_to(w)
             }
         }
     }

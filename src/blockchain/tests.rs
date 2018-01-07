@@ -1,16 +1,17 @@
-use blockchain::{timestamp, Block, Chain, ZERO_HASH};
+use blockchain::{now, Block, Chain, ZERO_HASH};
+use util::str_to_arrayvec;
 
 fn example_chain() -> Chain {
     let mut chain = Chain::new();
-    chain.mine_at("foo".into(), 1000);
-    chain.mine_at("bar".into(), 2500);
+    chain.mine_at(1000, str_to_arrayvec("foo").unwrap());
+    chain.mine_at(2500, str_to_arrayvec("bar").unwrap());
     chain
 }
 
 fn example_chain_2() -> Chain {
     let mut chain = Chain::new();
-    chain.mine_at("foo".into(), 1000);
-    chain.mine_at("baz".into(), 2000);
+    chain.mine_at(1000, str_to_arrayvec("foo").unwrap());
+    chain.mine_at(2000, str_to_arrayvec("baz").unwrap());
     chain
 }
 
@@ -20,9 +21,9 @@ fn combine() {
     let combined_2 = example_chain_2().combine(example_chain());
 
     let mut expected = Chain::new();
-    expected.mine_at("foo".into(), 1000);
-    expected.mine_at("baz".into(), 2000);
-    expected.mine_at("bar".into(), timestamp());
+    expected.mine_at(1000, str_to_arrayvec("foo").unwrap());
+    expected.mine_at(2000, str_to_arrayvec("baz").unwrap());
+    expected.mine_at(now(), str_to_arrayvec("bar").unwrap());
 
     assert_eq!(combined_1, expected);
     assert_eq!(combined_2, expected);
@@ -35,18 +36,16 @@ fn combine() {
 #[test]
 fn iter() {
     let mut expected = vec![
-        Block {
-            index: 0,
-            prev_hash: ZERO_HASH,
-            timestamp: 1515140055,
-            data: "Hello, world!".into(),
-            hash: ZERO_HASH,
-        },
+        Block::new(
+            0,
+            ZERO_HASH,
+            1515140055,
+            str_to_arrayvec("Hello, world!").unwrap(),
+        ),
     ];
-    expected[0].update_hash();
-    let mut next = expected[0].create_at("foo".into(), 1000);
+    let mut next = expected[0].create_at(1000, str_to_arrayvec("foo").unwrap());
     expected.push(next);
-    next = expected[1].create_at("bar".into(), 2500);
+    next = expected[1].create_at(2500, str_to_arrayvec("bar").unwrap());
     expected.push(next);
 
     for (i, block) in example_chain().into_iter().enumerate() {
@@ -64,4 +63,13 @@ fn find_fork() {
 
     assert_eq!(l.find_fork(&l), None);
     assert_eq!(r.find_fork(&r), None);
+}
+
+quickcheck! {
+    fn serialize_parse_is_identity(block: Block) -> () {
+        let mut buf = Vec::new();
+        block.write_to(&mut buf).expect("Failed to serialize");
+        let block2 = Block::parse_from(&buf).expect("Failed to parse");
+        assert_eq!(block, block2);
+    }
 }

@@ -1,4 +1,3 @@
-extern crate arrayvec;
 #[macro_use]
 extern crate clap;
 extern crate dotenv;
@@ -7,20 +6,13 @@ extern crate error_chain;
 extern crate log;
 extern crate minnehack_check_in;
 extern crate pretty_env_logger;
+extern crate serde_cbor;
 
-use std::collections::hash_map::Entry;
-use std::io::{stdin, BufRead, BufReader};
 use std::process::exit;
-use std::sync::Arc;
-use std::time::Duration;
-use std::thread::{sleep, spawn};
 
-use arrayvec::ArrayVec;
 use clap::ArgMatches;
 use error_chain::ChainedError;
-use minnehack_check_in::Result;
-use minnehack_check_in::cards::{parse_card, CardParse};
-use minnehack_check_in::p2p::{Message, P2P, PeerState};
+use minnehack_check_in::{Client, Result};
 
 fn main() {
     dotenv::dotenv().ok();
@@ -44,34 +36,10 @@ fn main() {
 }
 
 fn run(_matches: ArgMatches) -> Result<()> {
-    let p2p = Arc::new(P2P::new()?);
-
-    let discovery_p2p = p2p.clone();
-    spawn(move || discovery_thread(discovery_p2p));
-
-    let response_p2p = p2p.clone();
-    spawn(move || response_thread(response_p2p));
-
-    let mut stdin = BufReader::new(stdin());
-    let mut line = String::new();
-    loop {
-        line.clear();
-        stdin.read_line(&mut line)?;
-        match parse_card(&line) {
-            CardParse::Card(fields) => info!("TODO {:#?}", fields),
-            err => error!("Error reading card: {:?}", err),
-        }
-    }
+    Client::new()?.run()
 }
 
-fn discovery_thread(p2p: Arc<P2P>) {
-    loop {
-        info!("Sending discovery broadcast...");
-        log_err(p2p.send_discovery_broadcast());
-        sleep(Duration::from_secs(60));
-    }
-}
-
+/*
 fn response_thread(p2p: Arc<P2P>) {
     loop {
         match p2p.listen() {
@@ -124,9 +92,4 @@ fn response_thread(p2p: Arc<P2P>) {
         }
     }
 }
-
-fn log_err<T>(r: Result<T>) {
-    if let Err(err) = r {
-        error!("{}", err.display_chain());
-    }
-}
+*/

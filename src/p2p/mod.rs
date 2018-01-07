@@ -1,61 +1,51 @@
 //! The p2p messaging layer under the blockchain.
 
 mod message;
-mod parse;
+pub(crate) mod parse;
 mod serialize;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
-use std::sync::RwLock;
+use std::net::{SocketAddr, UdpSocket};
 
+use blockchain::Hash;
 use errors::{ErrorKind, Result, ResultExt};
 
 pub use self::message::Message;
 
-/// A P2P client.
+/// A client for the P2P protocol.
+#[derive(Debug)]
 pub struct P2P {
-    /// All known peers.
-    pub peers: RwLock<HashMap<SocketAddr, PeerState>>,
-
+    port: u16,
     socket: UdpSocket,
 }
 
 impl P2P {
-    /// Broadcasts a message to all peers.
-    pub fn broadcast(&self, msg: &Message) -> Result<()> {
-        for addr in self.peers.read().unwrap().keys() {
-            self.send_to(*addr, msg)?;
-        }
-        Ok(())
-    }
-
-    /// Listens for a message. Blocks until a message is received.
-    pub fn listen(&self) -> Result<(SocketAddr, Message)> {
-        let mut buf = [0; 0x10000];
-        let (len, addr) = self.socket.recv_from(&mut buf)?;
-        let buf = &buf[..len];
-
-        let msg = Message::parse_from(buf)
-            .ok_or_else(|| ErrorKind::InvalidPacket(buf.to_vec()))?;
-        debug!("Got message {:?} from {}", msg, addr);
-        Ok((addr, msg))
-    }
-
     /// Creates a new `P2P` instance with the default port (`10101`).
     pub fn new() -> Result<P2P> {
         P2P::with_port(10101)
     }
 
-    /// Broadcasts a discovery message. This only helps to discover peers on
-    /// the same LAN, and only for IPv4.
-    pub fn send_discovery_broadcast(&self) -> Result<()> {
-        self.send_to(([0xff; 4], 10101).into(), &Message::Ping)
+    /// Waits for a message, blocking until one is received.
+    pub fn recv(&self) -> Result<(SocketAddr, Message)> {
+        let mut buf = [0; 0x10000];
+        let (len, addr) = self.socket.recv_from(&mut buf)?;
+        let buf = &buf[..len];
+
+        let msg = Message::parse_from(&buf)
+            .chain_err(|| ErrorKind::InvalidPacket(buf.to_vec()))?;
+        Ok((addr, msg))
     }
 
-    /// Sends a message to the peer with the given public key.
-    pub fn send_to(&self, addr: SocketAddr, msg: &Message) -> Result<()> {
+    /// Broadcasts a discovery message. This only helps to discover peers on
+    /// the same LAN, and only for IPv4.
+    pub fn send_discovery(&self) -> Result<()> {
+        let addr = ([0xff; 4], self.port).into();
+        self.send(addr, Message::Ping)
+    }
+
+    /// Sends a message to the peer.
+    pub fn send(&self, addr: SocketAddr, msg: Message) -> Result<()> {
         let mut buf = Vec::new();
         msg.write_to(&mut buf).unwrap();
         self.socket
@@ -66,19 +56,39 @@ impl P2P {
 
     /// Creates a new `P2P` instance with the given port.
     pub fn with_port(port: u16) -> Result<P2P> {
-        let ipv4_unspecified: Ipv4Addr = [0; 4].into();
-        let ipv6_unspecified: Ipv6Addr = [0; 16].into();
-        let addrs: &[SocketAddr] = &[
-            (ipv4_unspecified, port).into(),
-            (ipv6_unspecified, port).into(),
-        ];
-        let socket = UdpSocket::bind(addrs)?;
+        let addr = SocketAddr::from(([0; 4], port));
+        let socket = UdpSocket::bind(&addr)?;
         socket.set_broadcast(true)?;
 
-        Ok(P2P {
-            peers: RwLock::new(HashMap::new()),
-            socket,
-        })
+        Ok(P2P { port, socket })
+    }
+}
+
+/// Information about a peer.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct Peer {
+    /// The peer's address.
+    pub addr: SocketAddr,
+
+    /// The peer's karma.
+    ///
+    /// Karma is expended every time we send a packet, and increased every time
+    /// we receive one. If it reaches a configured maximum value, the peer's
+    /// status is set back to `Speculative`.
+    pub karma: usize,
+
+    /// The peer's state.
+    pub state: PeerState,
+}
+
+impl Peer {
+    /// Creates a new Peer.
+    pub fn new(addr: SocketAddr) -> Peer {
+        Peer {
+            addr,
+            karma: 0,
+            state: PeerState::Speculative,
+        }
     }
 }
 
@@ -88,6 +98,13 @@ pub enum PeerState {
     /// This peer might exist; we don't know.
     Speculative,
 
-    /// This peer exists.
-    Confirmed,
+    /// This peer exists, but might be on a different blockchain from us.
+    Existent,
+
+    /// This peer exists and is on the same blockchain as us. Their tip index
+    /// and hash are the parameters.
+    Confirmed(u64, Hash),
+
+    /// The peer is on another blockchain or is blocked for other reasons.
+    Ignore,
 }

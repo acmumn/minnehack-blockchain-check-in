@@ -1,57 +1,90 @@
 //! The implementation of the actual blockchain, which manages a distributed
 //! set.
 
+pub(crate) mod parse;
+mod serialize;
 #[cfg(test)]
 mod tests;
 
 use std::cmp::max;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use arrayvec::ArrayVec;
 use byteorder::{ByteOrder, LE};
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
+#[cfg(test)]
+use quickcheck::{Arbitrary, Gen};
+
+use util::str_to_arrayvec;
 
 /// A SHA-256 hash.
-#[derive(Copy, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd,
+         Serialize)]
 pub struct Hash(pub [u8; 32]);
 
 /// The zero hash.
 pub const ZERO_HASH: Hash = Hash([0; 32]);
 
+#[cfg(test)]
+impl Arbitrary for Hash {
+    fn arbitrary<G: Gen>(gen: &mut G) -> Hash {
+        let mut buf = [0; 32];
+        gen.fill_bytes(&mut buf);
+        Hash(buf)
+    }
+}
+
 /// A block on the blockchain.
 #[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct Block {
-    index: u64,
-    prev_hash: Hash,
+    /// The index of the block in the chain.
+    pub index: u64,
+
+    /// The hash of the previous block in the chain.
+    pub prev_hash: Hash,
 
     /// The time at which the block's hash was computed. This may be updated
     /// when a fork occurs.
     pub timestamp: u64,
 
-    /// The data in the block.
-    pub data: Vec<u8>,
+    /// The hash of this block.
+    pub hash: Hash,
 
-    hash: Hash,
+    /// The data in the block.
+    pub data: ArrayVec<[u8; 256]>,
 }
 
 impl Block {
-    /// Calculates the hash that this block should have.
-    pub fn calc_hash(&self) -> Hash {
-        hash_block(self.index, &self.prev_hash, self.timestamp, &self.data)
-    }
-
     /// Creates a new block appended onto the current one with the given data.
-    pub fn create(&self, data: Vec<u8>) -> Block {
-        self.create_at(data, timestamp())
+    pub fn create(&self, data: ArrayVec<[u8; 256]>) -> Block {
+        self.create_at(now(), data)
     }
 
     /// Creates a new block appended onto the current one with the given data
     /// and timestamp.
-    pub fn create_at(&self, data: Vec<u8>, timestamp: u64) -> Block {
-        let index = self.index + 1;
-        let prev_hash = self.hash;
-        let hash = hash_block(index, &prev_hash, timestamp, &data);
+    pub fn create_at(
+        &self,
+        timestamp: u64,
+        data: ArrayVec<[u8; 256]>,
+    ) -> Block {
+        Block::new(self.index + 1, self.hash, timestamp, data)
+    }
 
+    /// Checks if this block's hash is internally consistent.
+    pub fn is_valid(&self) -> bool {
+        hash_block(self.index, &self.prev_hash, self.timestamp, &self.data)
+            == self.hash
+    }
+
+    /// Creates a new block with the given values.
+    pub fn new(
+        index: u64,
+        prev_hash: Hash,
+        timestamp: u64,
+        data: ArrayVec<[u8; 256]>,
+    ) -> Block {
+        let hash = hash_block(index, &prev_hash, timestamp, &data);
         Block {
             index,
             prev_hash,
@@ -59,16 +92,6 @@ impl Block {
             data,
             hash,
         }
-    }
-
-    /// Checks if this block's hash is internally consistent.
-    pub fn is_valid(&self) -> bool {
-        self.calc_hash() == self.hash
-    }
-
-    /// Updates the hash value to be correct.
-    pub fn update_hash(&mut self) {
-        self.hash = self.calc_hash();
     }
 
     /// Checks if another block is a valid "next block" relative to this block.
@@ -80,6 +103,24 @@ impl Block {
         } else {
             next.is_valid()
         }
+    }
+}
+
+#[cfg(test)]
+impl Arbitrary for Block {
+    fn arbitrary<G: Gen>(gen: &mut G) -> Block {
+        let len = gen.gen::<u8>();
+        let mut data = ArrayVec::new();
+        for _ in 0..len {
+            data.push(gen.gen());
+        }
+
+        Block::new(
+            u64::arbitrary(gen),
+            Hash::arbitrary(gen),
+            u64::arbitrary(gen),
+            data,
+        )
     }
 }
 
@@ -162,28 +203,25 @@ impl Chain {
     }
 
     /// Mines a new block with the given data.
-    pub fn mine(&mut self, data: Vec<u8>) {
+    pub fn mine(&mut self, data: ArrayVec<[u8; 256]>) {
         let block = self.last().create(data);
         self.blocks.push(block);
     }
 
     /// Mines a new block with the given data and timestamp.
-    pub fn mine_at(&mut self, data: Vec<u8>, timestamp: u64) {
-        let block = self.last().create_at(data, timestamp);
+    pub fn mine_at(&mut self, timestamp: u64, data: ArrayVec<[u8; 256]>) {
+        let block = self.last().create_at(timestamp, data);
         self.blocks.push(block);
     }
 
     /// Creates a new Chain with the default genesis block.
     pub fn new() -> Chain {
-        let mut genesis = Block {
-            index: 0,
-            prev_hash: ZERO_HASH,
-            timestamp: 1515140055,
-            data: "Hello, world!".into(),
-            hash: ZERO_HASH,
-        };
-        genesis.update_hash();
-        Chain::with_genesis(genesis)
+        Chain::with_genesis(Block::new(
+            0,
+            ZERO_HASH,
+            1515140055,
+            str_to_arrayvec("Hello, world!").unwrap(),
+        ))
     }
 
     /// Pushes a new block onto the chain. Returns whether the block was pushed
@@ -273,7 +311,7 @@ fn hash_block(
 }
 
 /// Returns the current Unix timestamp.
-fn timestamp() -> u64 {
+fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()

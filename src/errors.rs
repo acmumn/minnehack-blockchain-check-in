@@ -7,10 +7,6 @@ use p2p::Message;
 
 error_chain!{
     errors {
-        CouldNotInitLibSodium {
-            description("Could not initialize libsodium")
-            display("Could not initialize libsodium")
-        }
         CouldNotSendMessage(msg: Message, addr: SocketAddr) {
             description("Could not send a message")
             display("Could not send the message {:?} to {}", msg, addr)
