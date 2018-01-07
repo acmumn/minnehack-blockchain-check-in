@@ -38,7 +38,10 @@ impl Arbitrary for Hash {
 
 impl Display for Hash {
     fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
-        self.0.iter().map(|b| write!(fmt, "{:02x}", b)).collect()
+        for b in self.0.iter() {
+            write!(fmt, "{:02x}", b)?;
+        }
+        Ok(())
     }
 }
 
