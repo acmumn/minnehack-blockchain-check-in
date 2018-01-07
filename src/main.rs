@@ -11,6 +11,7 @@ extern crate serde_cbor;
 
 use std::io::{stdin, BufRead, BufReader, Write};
 use std::process::exit;
+use std::sync::Arc;
 
 use arrayvec::ArrayVec;
 
@@ -30,7 +31,7 @@ fn main() {
 
     info!("Starting up...");
     let client = match Client::new() {
-        Ok(val) => val,
+        Ok(val) => Arc::new(val),
         Err(err) => {
             error!("{}", err.display_chain());
             info!("Exiting with error...");
@@ -38,7 +39,7 @@ fn main() {
         }
     };
 
-    client.run_with_one(|_queue| {
+    client.clone().run_with_one(move |_queue| {
         let mut stdin = BufReader::new(stdin());
         let mut line = String::new();
         loop {
@@ -53,10 +54,7 @@ fn main() {
                         buf.push(field.len() as u8);
                         buf.write_all(field.as_bytes()).unwrap();
                     }
-
-                    // Lifetime magic ensues.
-                    // client.mine(buf);
-                    println!("TODO mine {:?}", buf);
+                    client.mine(buf);
                 }
                 err => error!("Error reading card: {:?}", err),
             }

@@ -1,16 +1,13 @@
-named!(pub card_result(&str) -> Option<[&str; 3]>,
+named!(pub card_result(&str) -> Option<Vec<&str>>,
     alt_complete!(card_result_err | card_result_ok));
-named!(card_result_ok(&str) -> Option<[&str; 3]>,
+named!(card_result_ok(&str) -> Option<Vec<&str>>,
     map!(card_stripes, Some));
-named!(card_result_err(&str) -> Option<[&str; 3]>,
+named!(card_result_err(&str) -> Option<Vec<&str>>,
     map!(tag_s!("%E?\n"), |_| None));
 
-named!(card_stripes(&str) -> [&str; 3], do_parse!(
+named!(card_stripes(&str) -> Vec<&str>, do_parse!(
     tag_s!("%") >>
-    tk1: take_until_s!("?") >>
-    tag_s!("?;") >>
-    tk2: take_until_s!("?") >>
-    tag_s!("?+") >>
-    tk3: take_until_s!("?") >>
+    init: many0!(map!(pair!(take_until_s!("^"), tag_s!("^")), |(s, _)| s)) >>
+    last: take_until_s!("?") >>
     tag_s!("?\n") >>
-    ( [tk1, tk2, tk3] )));
+    ({ let mut init = init; init.push(last); init })));

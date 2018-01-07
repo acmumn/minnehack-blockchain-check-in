@@ -161,10 +161,14 @@ impl Chain {
 
             if l_is_less {
                 self.blocks.extend(l);
-                r.into_iter().map(|b| b.data).for_each(|d| self.mine(d));
+                for block in r {
+                    self.mine(block.data);
+                }
             } else {
                 self.blocks.extend(r);
-                l.into_iter().map(|b| b.data).for_each(|d| self.mine(d));
+                for block in l {
+                    self.mine(block.data);
+                }
             }
             self
         } else {
@@ -213,9 +217,11 @@ impl Chain {
     }
 
     /// Mines a new block with the given data.
-    pub fn mine(&mut self, data: ArrayVec<[u8; 256]>) {
+    pub fn mine(&mut self, data: ArrayVec<[u8; 256]>) -> Hash {
         let block = self.tip().create(data);
+        let hash = block.hash;
         self.blocks.push(block);
+        hash
     }
 
     /// Mines a new block with the given data and timestamp.

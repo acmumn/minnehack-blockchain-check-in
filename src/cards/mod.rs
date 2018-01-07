@@ -5,10 +5,10 @@ pub(crate) mod parse;
 mod tests;
 
 /// The result of reading a card.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum CardParse<'a> {
     /// A successful read.
-    Card([&'a str; 3]),
+    Card(Vec<&'a str>),
 
     /// A read failed.
     BadRead,

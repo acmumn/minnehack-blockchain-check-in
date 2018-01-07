@@ -99,7 +99,9 @@ impl Client {
 
     /// Mines a new block with the given data.
     pub fn mine(&self, data: ArrayVec<[u8; 256]>) {
-        self.chain.lock().unwrap().mine(data)
+        let mut chain = self.chain.lock().unwrap();
+        let hash = chain.mine(data);
+        info!("Mined block {}", hash);
     }
 
     /// Runs the `Client` alongside the threads spawned by `spawn_others`.
@@ -183,7 +185,7 @@ impl Client {
     where
         F: 'static + FnOnce(&MsQueue<(SocketAddr, Message)>) + Send,
     {
-        self.run_with(move |scope, send_queue| {
+        self.run_with(|scope, send_queue| {
             scope.spawn(move || thread(&send_queue));
         })
     }

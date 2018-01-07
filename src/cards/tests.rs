@@ -8,7 +8,7 @@ use cards::parse::card_result;
 
 #[test]
 fn parse_err() {
-    let data = "%E?\n";
-    assert_eq!(card_result(data), IResult::Done("", None));
-    assert_eq!(parse_card(data), CardParse::BadRead);
+    let read = "%E?\n";
+    assert_eq!(card_result(read), IResult::Done("", None));
+    assert_eq!(parse_card(read), CardParse::BadRead);
 }
