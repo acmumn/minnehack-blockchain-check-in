@@ -9,6 +9,7 @@ extern crate minnehack_check_in;
 extern crate pretty_env_logger;
 
 use std::collections::hash_map::Entry;
+use std::io::{stdin, BufRead, BufReader};
 use std::process::exit;
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,6 +19,7 @@ use arrayvec::ArrayVec;
 use clap::ArgMatches;
 use error_chain::ChainedError;
 use minnehack_check_in::Result;
+use minnehack_check_in::cards::{parse_card, CardParse};
 use minnehack_check_in::p2p::{Message, P2P, PeerState};
 
 fn main() {
@@ -48,6 +50,30 @@ fn run(_matches: ArgMatches) -> Result<()> {
     let discovery_p2p = p2p.clone();
     spawn(move || discovery_thread(discovery_p2p));
 
+    let response_p2p = p2p.clone();
+    spawn(move || response_thread(response_p2p));
+
+    let mut stdin = BufReader::new(stdin());
+    let mut line = String::new();
+    loop {
+        line.clear();
+        stdin.read_line(&mut line)?;
+        match parse_card(&line) {
+            CardParse::Card(fields) => info!("TODO {:#?}", fields),
+            err => error!("Error reading card: {:?}", err),
+        }
+    }
+}
+
+fn discovery_thread(p2p: Arc<P2P>) {
+    loop {
+        info!("Sending discovery broadcast...");
+        log_err(p2p.send_discovery_broadcast());
+        sleep(Duration::from_secs(60));
+    }
+}
+
+fn response_thread(p2p: Arc<P2P>) {
     loop {
         match p2p.listen() {
             Ok((addr, msg)) => match msg {
@@ -97,14 +123,6 @@ fn run(_matches: ArgMatches) -> Result<()> {
             },
             Err(err) => error!("{}", err.display_chain()),
         }
-    }
-}
-
-fn discovery_thread(p2p: Arc<P2P>) {
-    loop {
-        info!("Sending discovery broadcast...");
-        log_err(p2p.send_discovery_broadcast());
-        sleep(Duration::from_secs(60));
     }
 }
 

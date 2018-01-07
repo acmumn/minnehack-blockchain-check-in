@@ -19,6 +19,7 @@ extern crate serde_derive;
 extern crate sodiumoxide;
 
 pub mod blockchain;
+pub mod cards;
 mod errors;
 pub mod p2p;
 pub mod util;
