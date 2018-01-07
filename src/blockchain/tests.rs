@@ -1,4 +1,4 @@
-use blockchain::{timestamp, Block, Chain, ZERO_DIGEST};
+use blockchain::{timestamp, Block, Chain, ZERO_HASH};
 
 fn example_chain() -> Chain {
     let mut chain = Chain::new();
@@ -37,10 +37,10 @@ fn iter() {
     let mut expected = vec![
         Block {
             index: 0,
-            prev_hash: ZERO_DIGEST,
+            prev_hash: ZERO_HASH,
             timestamp: 1515140055,
             data: "Hello, world!".into(),
-            hash: ZERO_DIGEST,
+            hash: ZERO_HASH,
         },
     ];
     expected[0].update_hash();

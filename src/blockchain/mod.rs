@@ -8,15 +8,21 @@ use std::cmp::max;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use byteorder::{ByteOrder, LE};
-use sodiumoxide::crypto::hash::sha512::{Digest, State};
+use crypto::digest::Digest;
+use crypto::sha2::Sha256;
 
-const ZERO_DIGEST: Digest = Digest([0; 64]);
+/// A SHA-256 hash.
+#[derive(Copy, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct Hash(pub [u8; 32]);
+
+/// The zero hash.
+pub const ZERO_HASH: Hash = Hash([0; 32]);
 
 /// A block on the blockchain.
 #[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct Block {
     index: u64,
-    prev_hash: Digest,
+    prev_hash: Hash,
 
     /// The time at which the block's hash was computed. This may be updated
     /// when a fork occurs.
@@ -25,12 +31,12 @@ pub struct Block {
     /// The data in the block.
     pub data: Vec<u8>,
 
-    hash: Digest,
+    hash: Hash,
 }
 
 impl Block {
     /// Calculates the hash that this block should have.
-    pub fn calc_hash(&self) -> Digest {
+    pub fn calc_hash(&self) -> Hash {
         hash_block(self.index, &self.prev_hash, self.timestamp, &self.data)
     }
 
@@ -171,10 +177,10 @@ impl Chain {
     pub fn new() -> Chain {
         let mut genesis = Block {
             index: 0,
-            prev_hash: ZERO_DIGEST,
+            prev_hash: ZERO_HASH,
             timestamp: 1515140055,
             data: "Hello, world!".into(),
-            hash: ZERO_DIGEST,
+            hash: ZERO_HASH,
         };
         genesis.update_hash();
         Chain::with_genesis(genesis)
@@ -244,24 +250,26 @@ impl<'a> Iterator for Iter<'a> {
 /// Hashes the components of a block.
 fn hash_block(
     index: u64,
-    prev_hash: &Digest,
+    prev_hash: &Hash,
     timestamp: u64,
     data: &[u8],
-) -> Digest {
-    let mut buf: [u8; 8] = Default::default();
-    let mut state = State::new();
+) -> Hash {
+    let mut buf = [0; 8];
+    let mut hasher = Sha256::new();
 
     LE::write_u64(&mut buf, index);
-    state.update(&buf);
+    hasher.input(&buf);
 
-    state.update(&prev_hash.0);
+    hasher.input(&prev_hash.0);
 
     LE::write_u64(&mut buf, timestamp);
-    state.update(&buf);
+    hasher.input(&buf);
 
-    state.update(data);
+    hasher.input(data);
 
-    state.finalize()
+    let mut hash = ZERO_HASH;
+    hasher.result(&mut hash.0);
+    hash
 }
 
 /// Returns the current Unix timestamp.

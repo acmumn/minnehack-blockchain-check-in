@@ -42,7 +42,6 @@ fn main() {
 }
 
 fn run(_matches: ArgMatches) -> Result<()> {
-    minnehack_check_in::init()?;
     let p2p = Arc::new(P2P::new()?);
 
     let discovery_p2p = p2p.clone();
