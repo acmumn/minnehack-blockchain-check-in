@@ -1,3 +1,4 @@
+extern crate arrayvec;
 #[macro_use]
 extern crate clap;
 extern crate dotenv;
@@ -8,10 +9,14 @@ extern crate minnehack_check_in;
 extern crate pretty_env_logger;
 extern crate serde_cbor;
 
+use std::io::{stdin, BufRead, BufReader, Write};
 use std::process::exit;
+
+use arrayvec::ArrayVec;
 
 use error_chain::ChainedError;
 use minnehack_check_in::Client;
+use minnehack_check_in::cards::{parse_card, CardParse};
 
 fn main() {
     dotenv::dotenv().ok();
@@ -24,12 +29,37 @@ fn main() {
     ).get_matches();
 
     info!("Starting up...");
-    match Client::new().and_then(|client| client.run()) {
-        Ok(()) => info!("Exiting peacefully..."),
+    let client = match Client::new() {
+        Ok(val) => val,
         Err(err) => {
             error!("{}", err.display_chain());
             info!("Exiting with error...");
             exit(1);
         }
-    }
+    };
+
+    client.run_with_one(|_queue| {
+        let mut stdin = BufReader::new(stdin());
+        let mut line = String::new();
+        loop {
+            line.clear();
+            stdin.read_line(&mut line).unwrap();
+
+            match parse_card(&line) {
+                CardParse::Card(fields) => {
+                    let mut buf = ArrayVec::<[u8; 256]>::new();
+                    buf.push(3);
+                    for field in fields.iter() {
+                        buf.push(field.len() as u8);
+                        buf.write_all(field.as_bytes()).unwrap();
+                    }
+
+                    // Lifetime magic ensues.
+                    // client.mine(buf);
+                    println!("TODO mine {:?}", buf);
+                }
+                err => error!("Error reading card: {:?}", err),
+            }
+        }
+    })
 }

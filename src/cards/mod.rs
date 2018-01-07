@@ -1,6 +1,8 @@
 //! Functions for the U Cards.
 
-mod parse;
+pub(crate) mod parse;
+#[cfg(test)]
+mod tests;
 
 /// The result of reading a card.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]

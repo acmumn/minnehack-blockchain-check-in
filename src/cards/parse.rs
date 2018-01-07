@@ -3,7 +3,7 @@ named!(pub card_result(&str) -> Option<[&str; 3]>,
 named!(card_result_ok(&str) -> Option<[&str; 3]>,
     map!(card_stripes, Some));
 named!(card_result_err(&str) -> Option<[&str; 3]>,
-    map!(tag_s!("%E?"), |_| None));
+    map!(tag_s!("%E?\n"), |_| None));
 
 named!(card_stripes(&str) -> [&str; 3], do_parse!(
     tag_s!("%") >>

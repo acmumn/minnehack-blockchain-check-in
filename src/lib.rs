@@ -25,18 +25,16 @@ pub mod p2p;
 pub mod util;
 
 use std::collections::HashMap;
-use std::io::{stdin, BufRead, BufReader};
 use std::net::SocketAddr;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::thread::sleep;
 
 use arrayvec::ArrayVec;
-use crossbeam::scope;
+use crossbeam::{scope, Scope};
 use crossbeam::sync::MsQueue;
 
 use blockchain::Chain;
-use cards::{parse_card, CardParse};
 pub use errors::{Error, ErrorKind, Result, ResultExt};
 use p2p::{Message, P2P, Peer};
 use util::log_err;
@@ -99,32 +97,25 @@ impl Client {
             .or_insert_with(|| Peer::new(addr));
     }
 
-    /// Runs the `Client`.
-    pub fn run(&self) -> Result<()> {
-        let send_queue = MsQueue::new();
+    /// Mines a new block with the given data.
+    pub fn mine(&self, data: ArrayVec<[u8; 256]>) {
+        self.chain.lock().unwrap().mine(data)
+    }
+
+    /// Runs the `Client` alongside the threads spawned by `spawn_others`.
+    pub fn run_with<F>(&self, spawn_others: F)
+    where
+        F: FnOnce(&Scope, Arc<MsQueue<(SocketAddr, Message)>>),
+    {
+        let send_queue = Arc::new(MsQueue::new());
         scope(|scope| {
-            let mut guards = ArrayVec::<[_; 5]>::new();
-
-            guards.push(scope.spawn(|| -> Result<()> {
-                let mut stdin = BufReader::new(stdin());
-                let mut line = String::new();
-                loop {
-                    line.clear();
-                    if log_err(stdin.read_line(&mut line).map(|_| ())) {
-                        continue;
-                    }
-
-                    match parse_card(&line) {
-                        CardParse::Card(fields) => info!("TODO {:#?}", fields),
-                        err => error!("Error reading card: {:?}", err),
-                    }
-                }
-            }));
-            guards.push(scope.spawn(|| loop {
+            scope.spawn(|| loop {
+                // Sender thread
                 let (addr, msg) = send_queue.pop();
                 log_err(self.p2p.send(addr, msg));
-            }));
-            guards.push(scope.spawn(|| loop {
+            });
+            scope.spawn(|| loop {
+                // Receiver thread
                 match self.p2p.recv() {
                     Ok((addr, msg)) => {
                         debug!("{} sent {:?}", addr, msg);
@@ -168,24 +159,32 @@ impl Client {
                         log_err(Err(err));
                     }
                 }
-            }));
-            guards.push(scope.spawn(|| loop {
+            });
+            scope.spawn(|| loop {
+                // Discovery thread
                 debug!("Sending discovery ping...");
                 log_err(self.p2p.send_discovery());
                 sleep(self.discovery_ping_interval);
-            }));
-            guards.push(scope.spawn(|| loop {
+            });
+            scope.spawn(|| loop {
+                // Status check thread
                 debug!("Asking peers for status updates...");
                 for addr in self.peers.lock().unwrap().keys() {
                     send_queue.push((*addr, Message::StatusRequest));
                 }
-                sleep(self.discovery_ping_interval);
-            }));
+                sleep(self.status_check_interval);
+            });
+            spawn_others(scope, send_queue.clone());
+        })
+    }
 
-            for guard in guards {
-                guard.join()?;
-            }
-            Ok(())
+    /// Runs the `Client` alongside the thread given by the function.
+    pub fn run_with_one<F>(&self, thread: F)
+    where
+        F: 'static + FnOnce(&MsQueue<(SocketAddr, Message)>) + Send,
+    {
+        self.run_with(move |scope, send_queue| {
+            scope.spawn(move || thread(&send_queue));
         })
     }
 }
