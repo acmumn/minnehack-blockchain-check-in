@@ -1,4 +1,4 @@
-all: check doc build-debug test-debug
+all: check doc build test
 build: build-debug build-release
 build-debug:
 	cargo build --all
