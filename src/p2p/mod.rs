@@ -41,11 +41,11 @@ impl P2P {
     /// the same LAN, and only for IPv4.
     pub fn send_discovery(&self) -> Result<()> {
         let addr = ([0xff; 4], self.port).into();
-        self.send(addr, Message::Ping)
+        self.send(addr, &Message::Ping)
     }
 
     /// Sends a message to the peer.
-    pub fn send(&self, addr: SocketAddr, msg: Message) -> Result<()> {
+    pub fn send(&self, addr: SocketAddr, msg: &Message) -> Result<()> {
         let mut buf = Vec::new();
         msg.write_to(&mut buf).unwrap();
         self.socket
@@ -88,6 +88,16 @@ impl Peer {
             addr,
             karma: 0,
             state: PeerState::Speculative,
+        }
+    }
+
+    /// Returns whether the peer has been confirmed to be on the same
+    /// blockchain as us.
+    pub fn same_blockchain(&self) -> bool {
+        if let PeerState::Confirmed(_, _) = self.state {
+            true
+        } else {
+            false
         }
     }
 }

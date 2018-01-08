@@ -34,9 +34,9 @@ use arrayvec::ArrayVec;
 use crossbeam::{scope, Scope};
 use crossbeam::sync::MsQueue;
 
-use blockchain::Chain;
+use blockchain::{Block, BlockStatus, Chain, Hash};
 pub use errors::{Error, ErrorKind, Result, ResultExt};
-use p2p::{Message, P2P, Peer};
+use p2p::{Message, P2P, Peer, PeerState};
 use util::log_err;
 
 /// A blockchain client, using the `p2p` module for sending blocks.
@@ -54,6 +54,7 @@ pub struct Client {
     chain: Mutex<Chain>,
     p2p: P2P,
     peers: Mutex<HashMap<SocketAddr, Peer>>,
+    send_queue: Arc<MsQueue<(Option<SocketAddr>, Message)>>,
 }
 
 impl Client {
@@ -85,36 +86,130 @@ impl Client {
             chain: Mutex::new(chain),
             p2p,
             peers: Mutex::new(HashMap::new()),
+            send_queue: Arc::new(MsQueue::new()),
         })
     }
 
     /// Adds a peer with the given address.
     pub fn add_peer(&self, addr: SocketAddr) {
-        self.peers
-            .lock()
-            .unwrap()
-            .entry(addr)
-            .or_insert_with(|| Peer::new(addr));
+        let mut peers = self.peers.lock().unwrap();
+        let peer = peers.entry(addr).or_insert_with(|| {
+            self.send_queue.push((Some(addr), Message::Ping));
+            Peer::new(addr)
+        });
+        peer.karma = peer.karma.saturating_sub(1);
+    }
+
+    fn handle_block(&self, block: Block, broadcast: bool) {
+        let mut chain = self.chain.lock().unwrap();
+        match chain.status(&block) {
+            // Add it and broadcast it.
+            BlockStatus::ValidTip => {
+                debug!("Adding and rebroadcasting block {}", block.hash);
+                assert!(chain.push(block.clone()));
+            }
+
+            // Don't try adding it, but broadcast it.
+            BlockStatus::PotentiallyValid => {
+                debug!("Not adding (but rebroadcasting) potentially valid block {}", block.hash);
+            }
+
+            // Ignore it and don't rebroadcast.
+            status => {
+                debug!("Ignoring {:?} block {}", status, block.hash);
+                return;
+            }
+        }
+
+        if broadcast {
+            let peers = self.peers.lock().unwrap();
+            let idx = block.index;
+            let peers = peers.values().filter(|p| {
+                if let PeerState::Confirmed(i, _) = p.state {
+                    i <= idx
+                } else {
+                    false
+                }
+            });
+            let msg = Message::BlockAnnounce(block);
+            for peer in peers {
+                self.send_queue.push((Some(peer.addr), msg.clone()));
+            }
+        }
+    }
+
+    fn handle_peer_status(
+        &self,
+        addr: SocketAddr,
+        genesis_hash: Hash,
+        tip_index: u64,
+        tip_hash: Hash,
+    ) {
+        let chain = self.chain.lock().unwrap();
+        let mut peers = self.peers.lock().unwrap();
+
+        if chain.genesis().hash == genesis_hash {
+            peers.entry(addr).or_insert_with(|| Peer::new(addr)).state =
+                PeerState::Confirmed(tip_index, tip_hash);
+            self.sync_with_peer(addr);
+        } else {
+            peers.entry(addr).or_insert_with(|| Peer::new(addr)).state =
+                PeerState::Ignore;
+        }
+    }
+
+    fn mark_peer_exists(&self, addr: SocketAddr) {
+        let mut peers = self.peers.lock().unwrap();
+        let peer = peers.entry(addr).or_insert_with(|| {
+            warn!(
+                "Peer should be Speculative before it gets marked as Existent"
+            );
+            let mut peer = Peer::new(addr);
+            peer.state = PeerState::Existent;
+            peer
+        });
+        if peer.state == PeerState::Speculative {
+            peer.state = PeerState::Existent;
+            self.send_queue.push((Some(addr), Message::StatusRequest));
+        }
+    }
+
+    fn sync_with_peer(&self, addr: SocketAddr) {
+        // let mut chain = self.chain.lock().unwrap();
+        let peers = self.peers.lock().unwrap();
+
+        let peer = peers[&addr];
+        unimplemented!("Sync with {:?}", peer)
     }
 
     /// Mines a new block with the given data.
     pub fn mine(&self, data: ArrayVec<[u8; 256]>) {
         let mut chain = self.chain.lock().unwrap();
-        let hash = chain.mine(data);
-        info!("Mined block {}", hash);
+        let block = chain.mine(data);
+        info!("Mined block {}", block.hash);
+
+        self.send_queue
+            .push((None, Message::BlockAnnounce(block.clone())));
     }
 
     /// Runs the `Client` alongside the threads spawned by `spawn_others`.
     pub fn run_with<F>(&self, spawn_others: F)
     where
-        F: FnOnce(&Scope, Arc<MsQueue<(SocketAddr, Message)>>),
+        F: FnOnce(&Scope, Arc<MsQueue<(Option<SocketAddr>, Message)>>),
     {
-        let send_queue = Arc::new(MsQueue::new());
         scope(|scope| {
             scope.spawn(|| loop {
                 // Sender thread
-                let (addr, msg) = send_queue.pop();
-                log_err(self.p2p.send(addr, msg));
+                let (addr, msg) = self.send_queue.pop();
+                if let Some(addr) = addr {
+                    log_err(self.p2p.send(addr, &msg));
+                } else {
+                    let peers = self.peers.lock().unwrap();
+                    let peers = peers.values().filter(|p| p.same_blockchain());
+                    for peer in peers {
+                        log_err(self.p2p.send(peer.addr, &msg));
+                    }
+                }
             });
             scope.spawn(|| loop {
                 // Receiver thread
@@ -124,9 +219,12 @@ impl Client {
                         self.add_peer(addr);
                         match msg {
                             Message::Ping => {
-                                send_queue.push((addr, Message::Pong));
+                                self.send_queue
+                                    .push((Some(addr), Message::Pong));
                             }
-                            Message::Pong => {}
+                            Message::Pong => {
+                                self.mark_peer_exists(addr);
+                            }
                             Message::PeerRequest => warn!("TODO PeerRequest"),
                             Message::PeerResponse(peers) => {
                                 warn!("TODO PeerResponse({:?})", peers);
@@ -138,22 +236,27 @@ impl Client {
                                 let ti = tip.index;
                                 let th = tip.hash;
                                 let msg = Message::StatusResponse(gh, ti, th);
-                                send_queue.push((addr, msg));
+                                self.send_queue.push((Some(addr), msg));
                             }
                             Message::StatusResponse(gh, ti, th) => {
-                                warn!(
-                                    "TODO StatusResponse({}, {}, {})",
-                                    gh, ti, th
-                                );
+                                self.handle_peer_status(addr, gh, ti, th);
                             }
                             Message::BlockRequest(idx) => {
-                                warn!("TODO BlockRequest({})", idx);
+                                let chain = self.chain.lock().unwrap();
+                                if idx < chain.len() {
+                                    self.send_queue.push((
+                                        Some(addr),
+                                        Message::BlockResponse(
+                                            chain[idx].clone(),
+                                        ),
+                                    ));
+                                }
                             }
                             Message::BlockResponse(block) => {
-                                warn!("TODO BlockResponse({:?})", block);
+                                self.handle_block(block, false);
                             }
                             Message::BlockAnnounce(block) => {
-                                warn!("TODO BlockAnnounce({:?})", block);
+                                self.handle_block(block, true);
                             }
                         }
                     }
@@ -171,19 +274,17 @@ impl Client {
             scope.spawn(|| loop {
                 // Status check thread
                 debug!("Asking peers for status updates...");
-                for addr in self.peers.lock().unwrap().keys() {
-                    send_queue.push((*addr, Message::StatusRequest));
-                }
+                self.send_queue.push((None, Message::StatusRequest));
                 sleep(self.status_check_interval);
             });
-            spawn_others(scope, send_queue.clone());
+            spawn_others(scope, self.send_queue.clone());
         })
     }
 
     /// Runs the `Client` alongside the thread given by the function.
     pub fn run_with_one<F>(&self, thread: F)
     where
-        F: 'static + FnOnce(&MsQueue<(SocketAddr, Message)>) + Send,
+        F: 'static + FnOnce(&MsQueue<(Option<SocketAddr>, Message)>) + Send,
     {
         self.run_with(|scope, send_queue| {
             scope.spawn(move || thread(&send_queue));

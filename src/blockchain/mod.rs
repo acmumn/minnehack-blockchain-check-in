@@ -1,13 +1,13 @@
-//! The implementation of the actual blockchain, which manages a distributed
-//! set.
+//! The implementation of the actual blockchain.
 
 pub(crate) mod parse;
 mod serialize;
 #[cfg(test)]
 mod tests;
 
-use std::cmp::max;
+use std::cmp::{max, Ordering};
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::ops::Index;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use arrayvec::ArrayVec;
@@ -148,8 +148,9 @@ impl Chain {
     /// valid.
     pub fn combine(mut self, mut other: Chain) -> Chain {
         if let Some(i) = self.find_fork(&other) {
-            let l = self.blocks.drain(i..).collect::<Vec<_>>();
-            let r = other.blocks.drain(i..).collect::<Vec<_>>();
+            let i_usize = i as usize;
+            let l = self.blocks.drain(i_usize..).collect::<Vec<_>>();
+            let r = other.blocks.drain(i_usize..).collect::<Vec<_>>();
             drop(other);
 
             // TODO: Rewrite this once NLLs are stable.
@@ -178,7 +179,7 @@ impl Chain {
 
     /// Finds the position at which two chains diverge. The blockchains must
     /// share a genesis block and both be valid.
-    pub fn find_fork(&self, other: &Chain) -> Option<usize> {
+    pub fn find_fork(&self, other: &Chain) -> Option<u64> {
         assert_eq!(self.genesis, other.genesis);
         assert!(self.is_valid());
         assert!(other.is_valid());
@@ -188,10 +189,10 @@ impl Chain {
                 (Some(l), Some(r)) => if l == r {
                     continue;
                 } else {
-                    return Some(i);
+                    return Some(i as u64);
                 },
-                (Some(_), None) => return Some(i),
-                (None, Some(_)) => return Some(i),
+                (Some(_), None) => return Some(i as u64),
+                (None, Some(_)) => return Some(i as u64),
                 (None, None) => unreachable!(),
             }
         }
@@ -216,18 +217,27 @@ impl Chain {
         self.genesis.index == 0
     }
 
+    /// Returns the number of blocks in the chain.
+    pub fn len(&self) -> u64 {
+        (self.blocks.len() as u64) + 1
+    }
+
     /// Mines a new block with the given data.
-    pub fn mine(&mut self, data: ArrayVec<[u8; 256]>) -> Hash {
+    pub fn mine(&mut self, data: ArrayVec<[u8; 256]>) -> &Block {
         let block = self.tip().create(data);
-        let hash = block.hash;
         self.blocks.push(block);
-        hash
+        self.blocks.last().unwrap()
     }
 
     /// Mines a new block with the given data and timestamp.
-    pub fn mine_at(&mut self, timestamp: u64, data: ArrayVec<[u8; 256]>) {
+    pub fn mine_at(
+        &mut self,
+        timestamp: u64,
+        data: ArrayVec<[u8; 256]>,
+    ) -> &Block {
         let block = self.tip().create_at(timestamp, data);
         self.blocks.push(block);
+        self.blocks.last().unwrap()
     }
 
     /// Creates a new Chain with the default genesis block.
@@ -243,11 +253,35 @@ impl Chain {
     /// Pushes a new block onto the chain. Returns whether the block was pushed
     /// or not.
     pub fn push(&mut self, block: Block) -> bool {
-        if self.valid_tail(&block) {
+        if self.valid_tip(&block) {
             self.blocks.push(block);
             true
         } else {
             false
+        }
+    }
+
+    /// Gets the status of a block with respect to the chain. This chain must
+    /// be valid.
+    pub fn status(&self, block: &Block) -> BlockStatus {
+        assert!(self.is_valid());
+
+        match self.len().cmp(&block.index) {
+            Ordering::Greater => {
+                if block == &self[block.index] {
+                    BlockStatus::Contained
+                } else {
+                    BlockStatus::Invalid
+                }
+            }
+            Ordering::Equal => {
+                if self.valid_tip(block) {
+                    BlockStatus::ValidTip
+                } else {
+                    BlockStatus::Invalid
+                }
+            }
+            Ordering::Less => BlockStatus::PotentiallyValid,
         }
     }
 
@@ -258,7 +292,7 @@ impl Chain {
 
     /// Returns whether the given block is valid as the next block in the
     /// chain.
-    pub fn valid_tail(&self, block: &Block) -> bool {
+    pub fn valid_tip(&self, block: &Block) -> bool {
         self.tip().valid_next(block)
     }
 
@@ -267,6 +301,17 @@ impl Chain {
         Chain {
             genesis,
             blocks: Vec::new(),
+        }
+    }
+}
+
+impl Index<u64> for Chain {
+    type Output = Block;
+    fn index(&self, index: u64) -> &Block {
+        if index == 0 {
+            self.genesis()
+        } else {
+            &self.blocks[(index as usize) - 1]
         }
     }
 }
@@ -283,10 +328,27 @@ impl<'a> IntoIterator for &'a Chain {
     }
 }
 
+/// The status of a block with regards to the chain.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum BlockStatus {
+    /// The block is contained within the chain.
+    Contained,
+
+    /// The block is valid to be appended to the tip of the chain.
+    ValidTip,
+
+    /// The block is potentially valid, but our chain isn't long enough to
+    /// verify that.
+    PotentiallyValid,
+
+    /// The block is definitely not valid.
+    Invalid,
+}
+
 /// An iterator over the blocks in the blockchain.
 pub struct Iter<'a> {
     chain: &'a Chain,
-    pos: usize,
+    pos: u64,
 }
 
 impl<'a> Iterator for Iter<'a> {
@@ -296,10 +358,10 @@ impl<'a> Iterator for Iter<'a> {
             let block = &self.chain.genesis;
             self.pos = 1;
             Some(block)
-        } else if self.pos > self.chain.blocks.len() {
+        } else if self.pos > (self.chain.blocks.len() as u64) {
             None
         } else {
-            let block = &self.chain.blocks[self.pos - 1];
+            let block = &self.chain.blocks[(self.pos - 1) as usize];
             self.pos += 1;
             Some(block)
         }
