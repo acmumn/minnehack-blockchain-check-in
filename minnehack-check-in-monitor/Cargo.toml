@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Nathan Ringo <remexre@gmail.com>"]
 
 [dependencies]
+crossbeam = "0.3.2"
 minnehack-check-in = { path = ".." }
+termion = "1.5.1"
 tui = "0.2.0"
-ctrlc = "3.0.3"
