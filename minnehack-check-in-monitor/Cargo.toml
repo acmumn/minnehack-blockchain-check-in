@@ -1,0 +1,9 @@
+[package]
+name = "minnehack-check-in-monitor"
+version = "0.1.0"
+authors = ["Nathan Ringo <remexre@gmail.com>"]
+
+[dependencies]
+minnehack-check-in = { path = ".." }
+tui = "0.2.0"
+ctrlc = "3.0.3"

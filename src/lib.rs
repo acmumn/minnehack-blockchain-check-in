@@ -290,4 +290,22 @@ impl Client {
             scope.spawn(move || thread(&send_queue));
         })
     }
+
+    /// Runs the given closure with the blockchain as an argument.
+    pub fn with_chain<F, T>(&self, f: F) -> T
+    where
+        F: FnOnce(&Chain) -> T,
+    {
+        let chain = self.chain.lock().unwrap();
+        f(&chain)
+    }
+
+    /// Runs the given closure with the peer list as an argument.
+    pub fn with_peers<F, T>(&self, f: F) -> T
+    where
+        F: FnOnce(&HashMap<SocketAddr, Peer>) -> T,
+    {
+        let peers = self.peers.lock().unwrap();
+        f(&peers)
+    }
 }

@@ -1,3 +1,9 @@
+[workspace]
+members = [
+	".",
+	"minnehack-check-in-monitor",
+]
+
 [package]
 authors = ["Nathan Ringo <remexre@gmail.com>"]
 name = "minnehack-check-in"
