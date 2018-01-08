@@ -145,16 +145,22 @@ impl Client {
         tip_index: u64,
         tip_hash: Hash,
     ) {
-        let chain = self.chain.lock().unwrap();
-        let mut peers = self.peers.lock().unwrap();
+        let sync = {
+            let chain = self.chain.lock().unwrap();
+            let mut peers = self.peers.lock().unwrap();
 
-        if chain.genesis().hash == genesis_hash {
-            peers.entry(addr).or_insert_with(|| Peer::new(addr)).state =
-                PeerState::Confirmed(tip_index, tip_hash);
-            self.sync_with_peer(addr);
-        } else {
-            peers.entry(addr).or_insert_with(|| Peer::new(addr)).state =
-                PeerState::Ignore;
+            if chain.genesis().hash == genesis_hash {
+                peers.entry(addr).or_insert_with(|| Peer::new(addr)).state =
+                    PeerState::Confirmed(tip_index, tip_hash);
+                true
+            } else {
+                peers.entry(addr).or_insert_with(|| Peer::new(addr)).state =
+                    PeerState::Ignore;
+                false
+            }
+        };
+        if sync {
+            self.sync_with_peer(addr)
         }
     }
 
@@ -179,7 +185,7 @@ impl Client {
         let peers = self.peers.lock().unwrap();
 
         let peer = peers[&addr];
-        unimplemented!("Sync with {:?}", peer)
+        warn!("TODO Sync with {:?}", peer)
     }
 
     /// Mines a new block with the given data.

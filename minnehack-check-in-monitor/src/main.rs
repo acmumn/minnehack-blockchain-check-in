@@ -9,9 +9,9 @@ use std::time::Duration;
 
 use minnehack_check_in::{Client, Result};
 use tui::Terminal;
-use tui::backend::{Backend, RawBackend};
+use tui::backend::RawBackend;
 use tui::layout::{Direction, Group, Size};
-use tui::widgets::{Block, Borders, SelectableList, Widget};
+use tui::widgets::{Block, Borders, Item, List, Widget};
 
 fn main() {
     ctrlc::set_handler(|| exit(130)).unwrap();
@@ -19,9 +19,8 @@ fn main() {
 }
 
 fn run() -> Result<()> {
-    let mut backend = RawBackend::new()?;
-    backend.clear()?;
-    let mut terminal = Terminal::new(backend)?;
+    let mut terminal = Terminal::new(RawBackend::new()?)?;
+    terminal.clear()?;
 
     let client = Arc::new(Client::new()?);
     client.clone().run_with_one(move |_| loop {
@@ -34,33 +33,32 @@ fn run() -> Result<()> {
 }
 
 fn render(client: &Client, terminal: &mut Terminal<RawBackend>) -> Result<()> {
-    let hashes = client.with_chain(|chain| {
-        chain
-            .into_iter()
-            .map(|block| block.hash.to_string())
-            .collect::<Vec<String>>()
-    });
-    let peers = client.with_peers(|peers| {
-        peers
-            .values()
-            .map(|peer| peer.addr.to_string())
-            .collect::<Vec<String>>()
-    });
-
     let size = terminal.size()?;
     Group::default()
         .direction(Direction::Horizontal)
         .margin(0)
         .sizes(&[Size::Min(10), Size::Fixed(70)])
         .render(terminal, &size, |terminal, chunks| {
-            // TODO Peer List
-            SelectableList::default()
+            let hashes = client.with_chain(|chain| {
+                chain
+                    .into_iter()
+                    .map(|block| block.hash.to_string())
+                    .map(Item::Data)
+                    .collect::<Vec<_>>()
+            });
+            let peers = client.with_peers(|peers| {
+                peers
+                    .values()
+                    .map(|peer| peer.addr.to_string())
+                    .map(Item::Data)
+                    .collect::<Vec<_>>()
+            });
+
+            List::new(peers.into_iter())
                 .block(Block::default().title("Peers").borders(Borders::ALL))
-                .items(&peers)
                 .render(terminal, &chunks[0]);
-            SelectableList::default()
+            List::new(hashes.into_iter())
                 .block(Block::default().title("Blocks").borders(Borders::ALL))
-                .items(&hashes)
                 .render(terminal, &chunks[1]);
         });
     Ok(())
