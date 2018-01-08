@@ -44,7 +44,7 @@ fn render(client: &Client, terminal: &mut Terminal<RawBackend>) -> Result<()> {
             let peers = client.with_peers(|peers| {
                 peers
                     .values()
-                    .map(|peer| peer.addr.to_string())
+                    .map(|peer| format!("{} -- {}", peer.addr, peer.karma))
                     .map(Item::Data)
                     .collect::<Vec<_>>()
             });

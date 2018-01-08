@@ -12,11 +12,12 @@ pub enum Event {
 pub fn thread(queue: &MsQueue<Event>) -> ! {
     loop {
         for event in stdin().events() {
-            match event.unwrap() {
+            let ev = match event.unwrap() {
                 TermEvent::Key(Key::Ctrl('c'))
-                | TermEvent::Key(Key::Char('q')) => queue.push(Event::Quit),
-                e => println!("{:?}", e),
-            }
+                | TermEvent::Key(Key::Char('q')) => Event::Quit,
+                _ => Event::Tick,
+            };
+            queue.push(ev);
         }
     }
 }

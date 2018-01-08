@@ -97,7 +97,7 @@ impl Client {
             self.send_queue.push((Some(addr), Message::Ping));
             Peer::new(addr)
         });
-        peer.karma = peer.karma.saturating_sub(1);
+        peer.karma = 0;
     }
 
     fn handle_block(&self, block: Block, broadcast: bool) {
@@ -207,10 +207,17 @@ impl Client {
             scope.spawn(|| loop {
                 // Sender thread
                 let (addr, msg) = self.send_queue.pop();
+                let mut peers = self.peers.lock().unwrap();
                 if let Some(addr) = addr {
-                    log_err(self.p2p.send(addr, &msg));
+                    let peer =
+                        peers.entry(addr).or_insert_with(|| Peer::new(addr));
+                    peer.karma += 1;
+                    if peer.karma > self.max_karma {
+                        peer.state = PeerState::Speculative;
+                    } else {
+                        log_err(self.p2p.send(addr, &msg));
+                    }
                 } else {
-                    let peers = self.peers.lock().unwrap();
                     let peers = peers.values().filter(|p| p.same_blockchain());
                     for peer in peers {
                         log_err(self.p2p.send(peer.addr, &msg));
