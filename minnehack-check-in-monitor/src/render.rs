@@ -2,9 +2,10 @@ use std::process::exit;
 
 use crossbeam::sync::MsQueue;
 use minnehack_check_in::{Client, Result};
+use minnehack_check_in::util::log_err;
 use tui::Terminal;
 use tui::backend::RawBackend;
-use tui::layout::{Direction, Group, Size};
+use tui::layout::{Direction, Group, Rect, Size};
 use tui::widgets::{Block, Borders, Item, List, Widget};
 
 use events::Event;
@@ -14,8 +15,11 @@ pub fn thread(
     event_queue: &MsQueue<Event>,
     terminal: &mut Terminal<RawBackend>,
 ) -> ! {
+    let mut size = terminal.size().unwrap();
     loop {
-        render(&client, terminal).unwrap();
+        if log_err(render(&client, terminal, &mut size)) {
+            continue;
+        }
         terminal.draw().unwrap();
         match event_queue.pop() {
             Event::Quit => {
@@ -27,8 +31,17 @@ pub fn thread(
     }
 }
 
-fn render(client: &Client, terminal: &mut Terminal<RawBackend>) -> Result<()> {
+fn render(
+    client: &Client,
+    terminal: &mut Terminal<RawBackend>,
+    old_size: &mut Rect,
+) -> Result<()> {
     let size = terminal.size()?;
+    if size != *old_size {
+        terminal.resize(size)?;
+        *old_size = size;
+    }
+
     Group::default()
         .direction(Direction::Horizontal)
         .margin(0)
