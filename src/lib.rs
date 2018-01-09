@@ -17,6 +17,7 @@ extern crate nom;
 extern crate quickcheck;
 #[macro_use]
 extern crate serde_derive;
+extern crate tokio_core;
 
 pub mod blockchain;
 pub mod cards;
@@ -238,10 +239,22 @@ impl Client {
                             Message::Pong => {
                                 self.mark_peer_exists(addr);
                             }
-                            Message::PeerRequest => warn!("TODO PeerRequest"),
-                            Message::PeerResponse(peers) => {
-                                warn!("TODO PeerResponse({:?})", peers);
+                            Message::PeerRequest => {
+                                let peers = self.peers.lock().unwrap();
+                                let peers = peers
+                                    .values()
+                                    .filter(|p| p.same_blockchain())
+                                    .map(|p| p.addr)
+                                    .take(8)
+                                    .collect();
+                                self.send_queue.push((
+                                    Some(addr),
+                                    Message::PeerResponse(peers),
+                                ));
                             }
+                            Message::PeerResponse(peers) => peers
+                                .into_iter()
+                                .for_each(|addr| self.add_peer(addr)),
                             Message::StatusRequest => {
                                 let chain = self.chain.lock().unwrap();
                                 let gh = chain.genesis().hash;

@@ -8,6 +8,7 @@ extern crate log;
 extern crate minnehack_check_in;
 extern crate pretty_env_logger;
 extern crate serde_cbor;
+extern crate toml;
 
 use std::io::{stdin, BufRead, BufReader, Write};
 use std::process::exit;
