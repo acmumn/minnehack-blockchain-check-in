@@ -8,6 +8,7 @@ extern crate crossbeam;
 extern crate crypto;
 #[macro_use]
 extern crate error_chain;
+extern crate futures;
 #[macro_use]
 extern crate log;
 #[macro_use]
@@ -190,6 +191,7 @@ impl Client {
             let l = chain.len();
             if i >= l {
                 self.send_queue.push((Some(addr), Message::BlockRequest(l)));
+                self.send_queue.push((Some(addr), Message::StatusRequest));
             }
         }
     }
