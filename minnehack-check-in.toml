@@ -1,0 +1,8 @@
+peers = [
+    "160.94.179.148:10101",
+]
+
+discovery_ping_interval = 60
+status_check_interval = 30
+max_karma = 10
+port = 10101

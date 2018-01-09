@@ -1,7 +1,7 @@
 use std::process::exit;
 
 use crossbeam::sync::MsQueue;
-use minnehack_check_in::{Client, Result};
+use minnehack_check_in::{Client, Result, ResultExt};
 use minnehack_check_in::util::log_err;
 use tui::Terminal;
 use tui::backend::RawBackend;
@@ -36,9 +36,9 @@ fn render(
     terminal: &mut Terminal<RawBackend>,
     old_size: &mut Rect,
 ) -> Result<()> {
-    let size = terminal.size()?;
+    let size = terminal.size().chain_err(|| "Is stdin closed?")?;
     if size != *old_size {
-        terminal.resize(size)?;
+        terminal.resize(size).chain_err(|| "Is stdin closed?")?;
         *old_size = size;
     }
 

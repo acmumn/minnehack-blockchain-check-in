@@ -29,7 +29,9 @@ impl P2P {
     /// Waits for a message, blocking until one is received.
     pub fn recv(&self) -> Result<(SocketAddr, Message)> {
         let mut buf = [0; 0x10000];
-        let (len, addr) = self.socket.recv_from(&mut buf)?;
+        let (len, addr) = self.socket
+            .recv_from(&mut buf)
+            .chain_err(|| ErrorKind::CouldNotRecvMessage)?;
         let buf = &buf[..len];
 
         let msg = Message::parse_from(&buf)
@@ -57,8 +59,11 @@ impl P2P {
     /// Creates a new `P2P` instance with the given port.
     pub fn with_port(port: u16) -> Result<P2P> {
         let addr = SocketAddr::from(([0; 4], port));
-        let socket = UdpSocket::bind(&addr)?;
-        socket.set_broadcast(true)?;
+        let socket = UdpSocket::bind(&addr)
+            .chain_err(|| ErrorKind::CouldNotStartListener)?;
+        socket
+            .set_broadcast(true)
+            .chain_err(|| ErrorKind::CouldNotStartListener)?;
 
         Ok(P2P { port, socket })
     }

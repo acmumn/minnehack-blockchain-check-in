@@ -17,7 +17,7 @@ use std::sync::Arc;
 use arrayvec::ArrayVec;
 
 use error_chain::ChainedError;
-use minnehack_check_in::Client;
+use minnehack_check_in::{Client, Config};
 use minnehack_check_in::cards::{parse_card, CardParse};
 
 fn main() {
@@ -31,7 +31,9 @@ fn main() {
     ).get_matches();
 
     info!("Starting up...");
-    let client = match Client::new() {
+    let client = match Client::new_from_config(
+        Config::load_from("minnehack-check-in.toml").unwrap_or_default(),
+    ) {
         Ok(val) => Arc::new(val),
         Err(err) => {
             error!("{}", err.display_chain());
@@ -39,7 +41,6 @@ fn main() {
             exit(1);
         }
     };
-    client.add_peer("160.94.179.148:10101".parse().unwrap());
 
     client.clone().run_with_one(move |_queue| {
         let mut stdin = BufReader::new(stdin());

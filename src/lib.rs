@@ -19,9 +19,11 @@ extern crate quickcheck;
 #[macro_use]
 extern crate serde_derive;
 extern crate tokio_core;
+extern crate toml;
 
 pub mod blockchain;
 pub mod cards;
+mod config;
 mod errors;
 pub mod p2p;
 pub mod util;
@@ -37,6 +39,7 @@ use crossbeam::{scope, Scope};
 use crossbeam::sync::MsQueue;
 
 use blockchain::{Block, BlockStatus, Chain, Hash};
+pub use config::Config;
 pub use errors::{Error, ErrorKind, Result, ResultExt};
 use p2p::{Message, P2P, Peer, PeerState};
 use util::log_err;
@@ -69,6 +72,21 @@ impl Client {
             Duration::from_secs(30),
             10,
         )
+    }
+
+    /// Creates a new `Client` from a `Config`.
+    pub fn new_from_config(config: Config) -> Result<Client> {
+        let mut client = Client::new_with_opts(
+            config.port,
+            Chain::new(),
+            Duration::from_secs(config.discovery_ping_interval),
+            Duration::from_secs(config.status_check_interval),
+            config.max_karma,
+        )?;
+        for addr in config.peers {
+            client.add_peer(addr);
+        }
+        Ok(client)
     }
 
     /// Creates a new `Client`.
