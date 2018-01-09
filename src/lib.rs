@@ -182,11 +182,16 @@ impl Client {
     }
 
     fn sync_with_peer(&self, addr: SocketAddr) {
-        // let mut chain = self.chain.lock().unwrap();
+        let chain = self.chain.lock().unwrap();
         let peers = self.peers.lock().unwrap();
 
         let peer = peers[&addr];
-        warn!("TODO Sync with {:?}", peer)
+        if let PeerState::Confirmed(i, _) = peer.state {
+            let l = chain.len();
+            if i >= l {
+                self.send_queue.push((Some(addr), Message::BlockRequest(l)));
+            }
+        }
     }
 
     /// Mines a new block with the given data.

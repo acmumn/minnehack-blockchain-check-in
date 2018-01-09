@@ -39,6 +39,7 @@ fn main() {
             exit(1);
         }
     };
+    client.add_peer("160.94.179.148:10101".parse().unwrap());
 
     client.clone().run_with_one(move |_queue| {
         let mut stdin = BufReader::new(stdin());
@@ -50,9 +51,13 @@ fn main() {
             match parse_card(&line) {
                 CardParse::Card(fields) => {
                     let mut buf = ArrayVec::<[u8; 256]>::new();
-                    buf.push(3);
+                    let l = fields.len();
+                    assert!(l < 256);
+                    buf.push(l as u8);
                     for field in fields.iter() {
-                        buf.push(field.len() as u8);
+                        let l = field.len();
+                        assert!(l < 256);
+                        buf.push(l as u8);
                         buf.write_all(field.as_bytes()).unwrap();
                     }
                     client.mine(buf);

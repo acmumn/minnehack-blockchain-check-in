@@ -224,9 +224,7 @@ impl Chain {
 
     /// Mines a new block with the given data.
     pub fn mine(&mut self, data: ArrayVec<[u8; 256]>) -> &Block {
-        let block = self.tip().create(data);
-        self.blocks.push(block);
-        self.blocks.last().unwrap()
+        self.mine_at(now(), data)
     }
 
     /// Mines a new block with the given data and timestamp.
@@ -237,7 +235,9 @@ impl Chain {
     ) -> &Block {
         let block = self.tip().create_at(timestamp, data);
         self.blocks.push(block);
-        self.blocks.last().unwrap()
+        let block = self.blocks.last().unwrap();
+        debug!("Blockchain now has {} blocks", self.len());
+        block
     }
 
     /// Creates a new Chain with the default genesis block.
