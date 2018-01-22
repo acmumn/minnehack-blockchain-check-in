@@ -1,6 +1,7 @@
 .*
 !.env
 !.gitignore
+!.travis.yml
 *~
 *.log
 *.rs.bk

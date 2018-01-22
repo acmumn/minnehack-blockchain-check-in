@@ -17,3 +17,5 @@ test-release:
 	cargo test --all --release
 watch TARGET="all":
 	watchexec -cre rs,toml "just {{TARGET}}"
+
+travis-ci: doc build test
