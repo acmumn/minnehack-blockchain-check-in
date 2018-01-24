@@ -17,8 +17,9 @@ use std::sync::Arc;
 use arrayvec::ArrayVec;
 
 use error_chain::ChainedError;
-use minnehack_check_in::{Client, Config};
+use minnehack_check_in::Client;
 use minnehack_check_in::cards::{parse_card, CardParse};
+use minnehack_check_in::util::load_toml_or_default;
 
 fn main() {
     dotenv::dotenv().ok();
@@ -31,9 +32,9 @@ fn main() {
     ).get_matches();
 
     info!("Starting up...");
-    let client = match Client::new_from_config(
-        Config::load_from("minnehack-check-in.toml").unwrap_or_default(),
-    ) {
+    let client = match Client::new_from_config(load_toml_or_default(
+        "minnehack-check-in.toml",
+    )) {
         Ok(val) => Arc::new(val),
         Err(err) => {
             error!("{}", err.display_chain());

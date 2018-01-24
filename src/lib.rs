@@ -16,6 +16,7 @@ extern crate nom;
 #[cfg(test)]
 #[macro_use]
 extern crate quickcheck;
+extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate tokio_core;
@@ -47,6 +48,9 @@ use util::log_err;
 /// A blockchain client, using the `p2p` module for sending blocks.
 #[derive(Debug)]
 pub struct Client {
+    /// The time to wait between asking peers for their peers.
+    pub discovery_peer_interval: Duration,
+
     /// The time to wait between sending discovery pings.
     pub discovery_ping_interval: Duration,
 
@@ -69,6 +73,7 @@ impl Client {
             10101,
             Chain::new(),
             Duration::from_secs(60),
+            Duration::from_secs(60),
             Duration::from_secs(30),
             10,
         )
@@ -76,10 +81,11 @@ impl Client {
 
     /// Creates a new `Client` from a `Config`.
     pub fn new_from_config(config: Config) -> Result<Client> {
-        let mut client = Client::new_with_opts(
+        let client = Client::new_with_opts(
             config.port,
             Chain::new(),
             Duration::from_secs(config.discovery_ping_interval),
+            Duration::from_secs(config.discovery_peer_interval),
             Duration::from_secs(config.status_check_interval),
             config.max_karma,
         )?;
@@ -94,11 +100,13 @@ impl Client {
         port: u16,
         chain: Chain,
         discovery_ping_interval: Duration,
+        discovery_peer_interval: Duration,
         status_check_interval: Duration,
         max_karma: usize,
     ) -> Result<Client> {
         let p2p = P2P::with_port(port)?;
         Ok(Client {
+            discovery_peer_interval,
             discovery_ping_interval,
             max_karma,
             status_check_interval,
@@ -328,8 +336,22 @@ impl Client {
                 self.send_queue.push((None, Message::StatusRequest));
                 sleep(self.status_check_interval);
             });
+            scope.spawn(|| loop {
+                // Peer acquire thread
+                debug!("Asking peers for their peers...");
+                for peer in self.peers.lock().unwrap().values() {
+                    warn!("TODO {:#?}", peer);
+                    // TODO
+                }
+                sleep(self.discovery_peer_interval);
+            });
             spawn_others(scope, self.send_queue.clone());
         })
+    }
+
+    /// Runs the `Client`.
+    pub fn run(&self) {
+        self.run_with(|_, _| {})
     }
 
     /// Runs the `Client` alongside the thread given by the function.

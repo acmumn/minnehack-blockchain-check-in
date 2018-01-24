@@ -11,7 +11,8 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use crossbeam::sync::MsQueue;
-use minnehack_check_in::{Client, Config, Result, ResultExt};
+use minnehack_check_in::{Client, Result, ResultExt};
+use minnehack_check_in::util::load_toml_or_default;
 use tui::Terminal;
 use tui::backend::RawBackend;
 
@@ -28,9 +29,9 @@ fn run() -> Result<()> {
         )?;
     terminal.clear().chain_err(|| "Is stdin closed?")?;
 
-    let client = Arc::new(Client::new_from_config(
-        Config::load_from("minnehack-check-in.toml").unwrap_or_default(),
-    )?);
+    let client = Arc::new(Client::new_from_config(load_toml_or_default(
+        "minnehack-check-in.toml",
+    ))?);
 
     let event_queue = Arc::new(MsQueue::new());
     client.clone().run_with(move |scope, _| {

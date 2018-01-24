@@ -2,6 +2,7 @@
 members = [
 	".",
 	"minnehack-check-in-monitor",
+	"minnehack-check-in-web",
 ]
 
 [package]

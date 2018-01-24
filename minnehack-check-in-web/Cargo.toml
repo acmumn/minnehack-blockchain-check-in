@@ -1,0 +1,15 @@
+[package]
+name = "minnehack-check-in-web"
+version = "0.1.0"
+authors = ["Nathan Ringo <remexre@gmail.com>"]
+
+[dependencies]
+iron = "0.6.0"
+logger = "0.4.0"
+minnehack-check-in = { path = ".." }
+mount = "0.4.0"
+persistent = "0.4.0"
+pretty_env_logger = "0.1.1"
+serde = "1.0.27"
+serde_derive = "1.0.27"
+serde_json = "1.0.9"

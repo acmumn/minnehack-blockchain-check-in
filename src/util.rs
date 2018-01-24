@@ -1,12 +1,51 @@
 //! Utility functions.
 
-use std::io::{Error as IoError, Write};
+use std::fs::File;
+use std::io::{Error as IoError, Read, Write};
+use std::path::Path;
 
 use arrayvec::{Array, ArrayVec};
 use byteorder::{ByteOrder, LE};
 use error_chain::ChainedError;
+use serde::Deserialize;
+use toml::de::from_str as toml_from_str;
 
-use errors::Error;
+use errors::{Error, ErrorKind, ResultExt};
+
+/// Attempts to load a TOML file into a `Deserialize`, using the `Default` if
+/// not possible.
+pub fn load_toml_or_default<
+    T: Default + for<'de> Deserialize<'de>,
+    P: AsRef<Path>,
+>(
+    path: P,
+) -> T {
+    let path = path.as_ref();
+    let read_string = || {
+        let mut buf = String::new();
+        let mut file = File::open(path)
+            .chain_err(|| ErrorKind::CouldNotReadConfig(path.to_owned()))?;
+        file.read_to_string(&mut buf)
+            .chain_err(|| ErrorKind::CouldNotReadConfig(path.to_owned()))?;
+        Ok(buf)
+    };
+
+    let r = read_string().and_then(|s| {
+        toml_from_str(&s)
+            .chain_err(|| ErrorKind::CouldNotParseConfig(path.to_owned()))
+    });
+    match r {
+        Ok(val) => val,
+        Err(err) => {
+            error!(
+                "When loading {}, an error occurred: {}",
+                path.display(),
+                err.display_chain()
+            );
+            T::default()
+        }
+    }
+}
 
 /// Logs an error, returning whether an error occurred.
 pub fn log_err<E: Into<Error>>(r: Result<(), E>) -> bool {
